@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+
+    <style>
+        * {
+            margin: 0;
+        }
+
+        .notifications {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .notification {
+            padding: 10px;
+            text-align: center;
+            background: #ddd;
+        }
+
+        .notification.error {
+            color: red;
+            background: rgba(255, 0, 0, .2);
+        }
+    </style>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        const [HEIGHT, WIDTH] = [300, 300];
+        const N_RESTRICTED = 'n-restricted';
+        const UPDATE_RATE = 100;
+        const PROCESSING_URL = 'http://127.0.0.1:8000/process/';
+        const MEDIA_CONSTANTS = { video: { width: WIDTH, height: HEIGHT } };
+
+        const video = document.getElementById('face');
+        const canvas = document.querySelector('canvas');
+        const photo = document.getElementById('photo');
+
+        for (let item of [video, canvas, photo]) {
+          item.setAttribute('height', HEIGHT);
+          item.setAttribute('width', WIDTH);
+        }
+
+        let loading = false;
+
+        const isConfigured = () => !!video.srcObject?.active;
+
+        const setup = async () => {
+          try {
+            setLoading(true);
+            const stream = await navigator.mediaDevices.getUserMedia(MEDIA_CONSTANTS);
+            hidePermissionRequired();
+            video.srcObject = stream;
+            video.onloadedmetadata = () => video.play();
+          } catch (err) {
+            showPermissionRequired();
+          } finally {
+            setLoading(false);
+          }
+        }
+
+        setInterval(async () => {
+          if (loading) return;
+
+          if (isConfigured()) {
+            prepareImage();
+            sendImage();
+          } else {
+            await setup();
+          }
+         }, UPDATE_RATE);
+
+        const setLoading = isOn => {
+          loading = isOn;
+        }
+
+        function hidePermissionRequired () {
+          const errorMessage = document.querySelector(`#${N_RESTRICTED}`);
+          if (errorMessage) {
+            errorMessage.remove();
+          }
+        }
+
+        function showPermissionRequired () {
+          if (document.querySelector(`#${N_RESTRICTED}`)) return;
+
+          const div = document.createElement('div');
+          div.classList.add('notification', 'error')
+          div.id = N_RESTRICTED;
+          div.textContent = 'Camera access is required'
+          document.querySelector('.notifications').appendChild(div);
+        }
+
+        function prepareImage () {
+          canvas.width = WIDTH;
+          canvas.height = HEIGHT;
+
+          canvas
+            .getContext('2d')
+            .drawImage(video, 0, 0, WIDTH, HEIGHT);
+        }
+
+        function sendImage () {
+          canvas.toBlob(async blob => {
+              const formData = new FormData();
+              formData.append('image', blob, 'image.png');
+
+              try {
+                setLoading(true);
+                console.log('preee')
+                const response = await fetch(PROCESSING_URL, {
+                  method: 'POST',
+                  body: formData,
+                });
+                const blob = await response.blob();
+                const src = URL.createObjectURL(blob);
+                photo.setAttribute('src', src);
+              } catch (e) {
+                throw e;
+              } finally {
+                setLoading(false);
+              }
+          });
+        }
+      }, false);
+    </script>
+</head>
+<body>
+    <div class="notifications"></div>
+
+    <h1>Image processor</h1>
+
+    <div>
+        <h3>Video:</h3>
+        <video id="face" height="100" width="100">Not available</video>
+    </div>
+
+    <div class="pictures">
+        <div>
+            <canvas id="canvas"></canvas>
+            <img src="#" alt="Processed image" id="photo" />
+        </div>
+    </div>
+
+</body>
+</html>
